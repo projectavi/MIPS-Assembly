@@ -3,6 +3,8 @@ displayAddress: .word 0x10008000
 ADDR_KBRD: .word 0xffff0000
 PADDLE_LOC_LEFT: .word 48
 PADDLE_LOC_RIGHT: .word 56
+BALL_LOC: .word 0
+BALL_ANGLE: .word -128
 
 .text
 .globl main
@@ -30,6 +32,60 @@ game_loop:
     beq $t8, 1, handle_keyboard_input
     j game_loop
     
+moving_game_loop:
+    lw $t0, ADDR_KBRD
+    lw $t8, 0($t0)
+    jal move_ball
+    beq $t8, 1, handle_keyboard_input
+    
+    # Sleep
+    addi $v0, $zero, 32
+    addi $a0, $zero, 24
+    syscall
+    
+    j moving_game_loop
+
+move_ball:
+    lw $t3, BALL_LOC # Get the current location of the ball
+    lw $a1, BALL_ANGLE # Get the angle of movement of the ball
+    
+    # Paint it black
+    addi $t1, $zero, 0x000000
+    sw $t1, 0($t3)
+    
+    # Move the location in the specified direction
+    add $t3, $t3, $a1
+    
+    # If new location is already white, bounce
+    lw $a2, 0($t3)
+    
+    beq $a2, 0xffffff, bounce
+    
+    # Paint it white
+    addi $t1, $zero, 0xffffff
+    sw $t1, 0($t3)
+    
+    # Store the new location in the variable
+    sw $t3, BALL_LOC
+    
+    jr $ra
+
+bounce:
+    addi $t2, $zero, -1
+    mult $a1, $a1, $t2
+    
+    add $t3, $t3, $a1
+    
+    # Paint it white
+    addi $t1, $zero, 0xffffff
+    sw $t1, 0($t3)
+    
+    # Store the new location in the variable
+    sw $t3, BALL_LOC
+    sw $a1, BALL_ANGLE
+    
+    jr $ra
+
 handle_keyboard_input:
     lw $a0, 4($t0) # Loads the second word, which is the key that was pressed
     beq $a0, 32, handle_spacebar_pressed
@@ -37,13 +93,18 @@ handle_keyboard_input:
     beq $a0, 'A', handle_a_pressed
     beq $a0, 'd', handle_d_pressed
     beq $a0, 'D', handle_d_pressed
-    j game_loop
+    beq $a0, 'q', handle_escape_key
+    beq $a0, 'Q', handle_escape_key
+    j moving_game_loop
+  
+handle_escape_key:
+    j exit
   
 handle_d_pressed:
     lw $t0, PADDLE_LOC_LEFT
     lw $t1, PADDLE_LOC_RIGHT
     
-    beq $t1, 0x10009678, game_loop
+    beq $t1, 0x10009678, moving_game_loop
     
     addi, $t2, $zero, 0x000000
     
@@ -58,7 +119,7 @@ handle_d_pressed:
     sw $t1, PADDLE_LOC_RIGHT
     
     addi $t8, $zero, 0
-    j game_loop
+    j moving_game_loop
     
 handle_a_pressed:
     lw $t0, PADDLE_LOC_LEFT
@@ -78,14 +139,11 @@ handle_a_pressed:
     sw $t0, PADDLE_LOC_LEFT
     
     addi $t8, $zero, 0
-    j game_loop
+    j moving_game_loop
     
 handle_spacebar_pressed:
-    li $v0, 1
-    li $a0, 69
-    syscall
-    addi $t0, $zero, 0
-    j game_loop
+    # Shoot the ball upwards
+    j moving_game_loop
     
     
 exit:
@@ -128,6 +186,7 @@ setup_border_and_paddle_and_ball:
     mult $a0, $a0, $t0
     addi $a0, $a0, 0x10008000 
     addi $a0, $a0, 64
+    sw $a0, BALL_LOC
     
     jal draw_rect
     
