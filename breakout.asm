@@ -1,7 +1,11 @@
 .data
 displayAddress: .word 0x10008000
+ADDR_KBRD: .word 0xffff0000
+PADDLE_LOC_LEFT: .word 48
+PADDLE_LOC_RIGHT: .word 56
 
 .text
+.globl main
 lw $t0, displayAddress # Load the address for the display into t0
 li $t1, 0xff0000 	# $t1 stores the red colour code
 li $t2, 0x00ff00 	# $t2 stores the green colour code
@@ -16,9 +20,73 @@ main:
     
     # Memory wipe
     
-    
+    jal game_loop
     
     j exit
+    
+game_loop:
+    lw $t0, ADDR_KBRD
+    lw $t8, 0($t0)
+    beq $t8, 1, handle_keyboard_input
+    j game_loop
+    
+handle_keyboard_input:
+    lw $a0, 4($t0) # Loads the second word, which is the key that was pressed
+    beq $a0, 32, handle_spacebar_pressed
+    beq $a0, 'a', handle_a_pressed
+    beq $a0, 'A', handle_a_pressed
+    beq $a0, 'd', handle_d_pressed
+    beq $a0, 'D', handle_d_pressed
+    j game_loop
+  
+handle_d_pressed:
+    lw $t0, PADDLE_LOC_LEFT
+    lw $t1, PADDLE_LOC_RIGHT
+    
+    beq $t1, 0x10009678, game_loop
+    
+    addi, $t2, $zero, 0x000000
+    
+    sw $t2, 0($t0)
+    addi $t0, $t0, 4
+    sw $t0, PADDLE_LOC_LEFT
+    
+    addi $t2, $zero, 0xffffff
+    
+    addi $t1, $t1, 4
+    sw $t2, 0($t1)
+    sw $t1, PADDLE_LOC_RIGHT
+    
+    addi $t8, $zero, 0
+    j game_loop
+    
+handle_a_pressed:
+    lw $t0, PADDLE_LOC_LEFT
+    lw $t1, PADDLE_LOC_RIGHT
+    
+    beq $t0, 0x10009604, game_loop
+    
+    addi, $t2, $zero, 0x000000
+    
+    sw $t2, 0($t1)
+    addi $t1, $t1, -4
+    sw $t1, PADDLE_LOC_RIGHT
+    
+    addi $t2, $zero, 0xffffff
+    addi $t0, $t0, -4
+    sw $t2, 0($t0)
+    sw $t0, PADDLE_LOC_LEFT
+    
+    addi $t8, $zero, 0
+    j game_loop
+    
+handle_spacebar_pressed:
+    li $v0, 1
+    li $a0, 69
+    syscall
+    addi $t0, $zero, 0
+    j game_loop
+    
     
 exit:
 li $v0, 10 # terminate the program gracefully
@@ -27,6 +95,7 @@ syscall
 setup_border_and_paddle_and_ball:
     add $v0, $ra, $zero
     
+    # Left Wall
     li $a3, 0xffffff
     li $a2, 96
     li $a1, 1
@@ -34,6 +103,7 @@ setup_border_and_paddle_and_ball:
     
     jal draw_rect
     
+    # Paddle
     li $a3, 0xffffff
     li $a2, 1
     li $a1, 8
@@ -41,10 +111,15 @@ setup_border_and_paddle_and_ball:
     addi $t0, $zero, 44
     mult $a0, $a0, $t0
     addi $a0, $a0, 0x10008000 
-    addi $a0, $a0, 48
+    lw $t0, PADDLE_LOC_LEFT
+    add $a0, $a0, $t0
+    sw $a0, PADDLE_LOC_LEFT
+    addi $t0, $a0, 28
+    sw $t0, PADDLE_LOC_RIGHT
     
     jal draw_rect
     
+    # Ball
     li $a3, 0xffffff
     li $a2, 1
     li $a1, 1
@@ -56,6 +131,7 @@ setup_border_and_paddle_and_ball:
     
     jal draw_rect
     
+    # Right Wall
     li $a3, 0xffffff
     li $a2, 96
     li $a1, 1
@@ -64,6 +140,7 @@ setup_border_and_paddle_and_ball:
     
     jal draw_rect
     
+    # Ceiling
     li $a3, 0xffffff
     li $a2, 1
     li $a1, 64
