@@ -83,7 +83,7 @@ move_ball:
     
     # Sleep
     addi $v0, $zero, 32
-    addi $a0, $zero, 44
+    addi $a0, $zero, 24
     syscall
     
     # Check if ball has reached the bottom of the screen and if so, end game
@@ -284,7 +284,12 @@ handle_keyboard_input:
     beq $a0, 'D', handle_d_pressed
     beq $a0, 'q', handle_escape_key
     beq $a0, 'Q', handle_escape_key
+    beq $a0, 'p', handle_p_pressed
+    beq $a0, 'P', handle_p_pressed
     j moving_game_loop
+  
+handle_p_pressed:
+    j game_loop
   
 handle_escape_key:
     j exit
@@ -293,7 +298,7 @@ handle_d_pressed:
     lw $t0, PADDLE_LOC_LEFT
     lw $t1, PADDLE_LOC_RIGHT
     
-    beq $t1, 0x100096f8, moving_game_loop
+    beq $t1, 0x10009e78, moving_game_loop
     
     addi, $t2, $zero, 0x000000
     
@@ -314,7 +319,7 @@ handle_a_pressed:
     lw $t0, PADDLE_LOC_LEFT
     lw $t1, PADDLE_LOC_RIGHT
     
-    beq $t0, 0x10009684, moving_game_loop
+    beq $t0, 0x10009e04, moving_game_loop
     
     addi, $t2, $zero, 0x000000
     
@@ -355,7 +360,7 @@ setup_border_and_paddle_and_ball:
     li $a2, 1
     li $a1, 8
     addi $a0, $zero, 128
-    addi $t0, $zero, 45
+    addi $t0, $zero, 60
     mult $a0, $a0, $t0
     addi $a0, $a0, 0x10008000 
     lw $t0, PADDLE_LOC_LEFT
@@ -371,7 +376,7 @@ setup_border_and_paddle_and_ball:
     li $a2, 1
     li $a1, 1
     addi $a0, $zero, 128
-    addi $t0, $zero, 42
+    addi $t0, $zero, 58
     mult $a0, $a0, $t0
     addi $a0, $a0, 0x10008000 
     addi $a0, $a0, 64
