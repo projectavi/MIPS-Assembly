@@ -52,15 +52,27 @@ move_ball:
     # Check up
     addi $t3, $t3, -128
     lw $a2, 0($t3)
+    bne $a2, 0x000000, bounce_down_control
+    
+    # Check down
+    addi $t3, $t3, 256
+    lw $a2, 0($t3)
     bne $a2, 0x000000, bounce_up_control
+    
+    # Check left
+    addi $t3, $t3, -132
+    lw $a2, 0($t3)
+    bne $a2, 0x000000, bounce_right_control
+    
+    # Check right
+    addi $t3, $t3, 8
+    lw $a2, 0($t3)
+    bne $a2, 0x000000, bounce_left_control
+    
+    lw $t3, BALL_LOC # Get the current location of the ball
     
     # Move the location in the specified direction
     add $t3, $t3, $a1
-    
-    # If new location is already white, bounce
-    lw $a2, 0($t3)
-    
-    bne $a2, 0x000000, bounce_command
     
     # Paint it white
     addi $t1, $zero, 0xffffff
@@ -76,22 +88,75 @@ move_ball:
     
     jr $ra
 
-bounce_command:
-    add $t4, $t3, $zero
-    # Undo movement
-    sub $t3, $t3, $a1
-
-    # Use the wall colour to identify what is being hit
-    beq $a2, 0xffffff, bounce_paddle
-    beq $a2, 0xfffffe, bounce_left
-    beq $a2, 0xfffffd, bounce_right
-    beq $a2, 0xfffffc, bounce_roof
-    # The else case will be a block
+bounce_down_control:
+    lw $a1, BALL_ANGLE # Get the angle of movement of the ball
+    addi $t9, $a2, 0
+    lw $t3, BALL_LOC # Get the current location of the ball
+    # Check if corner
+    addi $t3, $t3, -4
+    lw $a2, 0($t3)
+    bne $a2, 0x000000, bounce_downright
     
-    # If ball moving down then treat as paddle, if ball moving up then treat as ceiling
-    # If you hit the block from the side then HMMMMMMM
+    addi $t3, $t3, 8
+    lw $a2, 0($t3)
+    bne $a2, 0x000000, bounce_downleft
+    lw $t3, BALL_LOC # Get the current location of the ball
+    
+    addi $a2, $t9, 0
+
+    beq $a2, 0xfffffc, bounce_roof
     
     # Delete brick: check horizontally for all connected coloured pixels and colour them black, the location is $t4
+    add $t4, $t3, -128
+    add $t5, $t4, $zero
+    j delete_brick_loop_left
+    
+bounce_up_control:
+    lw $a1, BALL_ANGLE # Get the angle of movement of the ball
+    addi $t9, $a2, 0
+    lw $t3, BALL_LOC # Get the current location of the ball
+    
+    addi $a2, $t9, 0
+    beq $a2, 0xffffff, bounce_paddle
+    
+    # Delete brick: check horizontally for all connected coloured pixels and colour them black, the location is $t4
+    add $t4, $t3, 128
+    add $t5, $t4, $zero
+    j delete_brick_loop_left
+    
+bounce_left_control:
+    lw $a1, BALL_ANGLE # Get the angle of movement of the ball
+    addi $t9, $a2, 0
+    lw $t3, BALL_LOC # Get the current location of the ball
+    # Check if corner
+    addi $t3, $t3, -128
+    lw $a2, 0($t3)
+    bne $a2, 0x000000, bounce_downright
+    lw $t3, BALL_LOC # Get the current location of the ball
+    
+    addi $a2, $t9, 0
+    beq $a2, 0xfffffd, bounce_right
+    
+    # Delete brick: check horizontally for all connected coloured pixels and colour them black, the location is $t4
+    add $t4, $t3, 4
+    add $t5, $t4, $zero
+    j delete_brick_loop_left
+    
+bounce_right_control:
+    lw $a1, BALL_ANGLE # Get the angle of movement of the ball
+    addi $t9, $a2, 0
+    lw $t3, BALL_LOC # Get the current location of the ball
+    # Check if corner
+    addi $t3, $t3, 4
+    lw $a2, 0($t3)
+    bne $a2, 0x000000, bounce_downleft
+    lw $t3, BALL_LOC # Get the current location of the ball
+    
+    addi $a2, $t9, 0
+    beq $a2, 0xfffffe, bounce_left
+    
+    # Delete brick: check horizontally for all connected coloured pixels and colour them black, the location is $t4
+    add $t4, $t3, -4
     add $t5, $t4, $zero
     j delete_brick_loop_left
     
@@ -103,8 +168,10 @@ delete_brick_bounce:
     
 delete_brick_loop_right:
     # Reset $t5
-    add $t5, $t4, $zero
+    addi $t5, $t4, 4
+    j delete_brick_actual_loop_part_right
     
+delete_brick_actual_loop_part_right:
     # Get the value of the colour at $t5
     lw $t6, 0($t5)
     
@@ -120,7 +187,7 @@ delete_brick_loop_right:
     # Move $t5 left
     addi $t5, $t5, 4
     
-    j delete_brick_loop_right
+    j delete_brick_actual_loop_part_right
     
 delete_brick_loop_left:
     # Temporarily use $t5 to store which pixel you are deleting
