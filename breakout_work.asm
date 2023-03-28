@@ -86,6 +86,11 @@ move_ball:
     addi $a0, $zero, 44
     syscall
     
+    # Check if ball has reached the bottom of the screen and if so, end game
+    lw $v0, PADDLE_LOC_RIGHT
+    addi $v0, $v0, 128
+    bgt $t3, $v0, exit
+    
     jr $ra
 
 bounce_down_control:
