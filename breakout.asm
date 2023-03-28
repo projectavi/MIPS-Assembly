@@ -48,12 +48,6 @@ move_ball:
     addi $t1, $zero, 0x000000
     sw $t1, 0($t3)
     
-    # Check around the ball instead of the new location
-    # Check up
-    addi $t3, $t3, -128
-    lw $a2, 0($t3)
-    bne $a2, 0x000000, bounce_up_control
-    
     # Move the location in the specified direction
     add $t3, $t3, $a1
     

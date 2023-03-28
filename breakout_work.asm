@@ -141,6 +141,7 @@ bounce_left_control:
     
     addi $a2, $t9, 0
     beq $a2, 0xfffffd, bounce_right
+    beq $a2, 0xffffff, bounce_right
     
     # Delete brick: check horizontally for all connected coloured pixels and colour them black, the location is $t4
     add $t4, $t3, 4
@@ -159,6 +160,7 @@ bounce_right_control:
     
     addi $a2, $t9, 0
     beq $a2, 0xfffffe, bounce_left
+    beq $a2, 0xffffff, bounce_left
     
     # Delete brick: check horizontally for all connected coloured pixels and colour them black, the location is $t4
     add $t4, $t3, -4
