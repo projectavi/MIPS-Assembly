@@ -14,6 +14,7 @@
 # - spacebar : Launch Ball/Resume Game
 # - p : pause game
 # - q : quit game
+# - r : restart game
 ##############################################################################
 
 .data
@@ -69,7 +70,7 @@ reset_variables:
 game_loop:
     lw $t0, ADDR_KBRD
     lw $t8, 0($t0)
-    beq $t8, 1, handle_keyboard_input
+    beq $t8, 1, handle_keyboard_input_stat
     j game_loop
     
 moving_game_loop:
@@ -210,6 +211,18 @@ bounce_right_control:
 delete_brick_bounce:
     # If ball was moving up then bounce down, if ball was moving down then bounce up
     
+    addi $t9, $a1, 0
+    
+    # Play sound on brick hit
+    addi $v0, $zero, 33
+    addi $a0, $zero, 64
+    addi $a1, $zero, 50
+    addi $a2, $zero, 20
+    addi $a3, $zero, 50
+    syscall
+    
+    addi $a1, $t9, 0
+    
     # Load the refresh rate into $t9 and reduce it and store it back in refresh rate
     lw $t9, REFRESH_RATE
     addi $t9, $t9, -1
@@ -231,15 +244,20 @@ delete_brick_actual_loop_part_right:
     beq $t6, 0x000000, delete_brick_bounce
     
     # Store painting colour in $t7
-    addi $t7, $zero, 0x000000
-    
-    # Paint it black
-    sw $t7, 0($t5)
-    
-    # Move $t5 left
-    addi $t5, $t5, 4
-    
-    j delete_brick_actual_loop_part_right
+    # Store painting colour in $t7
+    beq $t6, 0x222222, set_blackr
+    addi $t7, $zero, 0x222222
+    j skipr
+    set_blackr:
+        addi $t7, $zero, 0x000000 
+    skipr:
+        # Paint it black
+        sw $t7, 0($t5)
+        
+        # Move $t5 left
+        addi $t5, $t5, 4
+        
+        j delete_brick_actual_loop_part_right
     
 delete_brick_loop_left:
     # Temporarily use $t5 to store which pixel you are deleting
@@ -251,15 +269,19 @@ delete_brick_loop_left:
     beq $t6, 0x000000, delete_brick_loop_right
     
     # Store painting colour in $t7
-    addi $t7, $zero, 0x000000
-    
-    # Paint it black
-    sw $t7, 0($t5)
-    
-    # Move $t5 left
-    addi $t5, $t5, -4
-    
-    j delete_brick_loop_left
+    beq $t6, 0x222222, set_blackl
+    addi $t7, $zero, 0x222222
+    j skipl
+    set_blackl:
+        addi $t7, $zero, 0x000000 
+    skipl:
+        # Paint it black
+        sw $t7, 0($t5)
+        
+        # Move $t5 left
+        addi $t5, $t5, -4
+        
+        j delete_brick_loop_left
     
 bounce_paddle:
     # Bounce when the ball hits the paddle from above
@@ -322,11 +344,25 @@ bounce_end:
 
 handle_keyboard_input:
     lw $a0, 4($t0) # Loads the second word, which is the key that was pressed
-    beq $a0, 32, handle_spacebar_pressed
     beq $a0, 'a', handle_a_pressed
     beq $a0, 'A', handle_a_pressed
     beq $a0, 'd', handle_d_pressed
     beq $a0, 'D', handle_d_pressed
+    beq $a0, 'q', handle_escape_key
+    beq $a0, 'Q', handle_escape_key
+    beq $a0, 'p', handle_p_pressed
+    beq $a0, 'P', handle_p_pressed
+    beq $a0, 'r', handle_r_pressed
+    beq $a0, 'R', handle_r_pressed
+    j moving_game_loop
+    
+handle_keyboard_input_stat:
+    lw $a0, 4($t0) # Loads the second word, which is the key that was pressed
+    beq $a0, 32, handle_spacebar_pressed
+    beq $a0, 'a', handle_a_pressed_stat
+    beq $a0, 'A', handle_a_pressed_stat
+    beq $a0, 'd', handle_d_pressed_stat
+    beq $a0, 'D', handle_d_pressed_stat
     beq $a0, 'q', handle_escape_key
     beq $a0, 'Q', handle_escape_key
     beq $a0, 'p', handle_p_pressed
@@ -403,6 +439,35 @@ handle_d_pressed:
     addi $t8, $zero, 0
     j moving_game_loop
     
+handle_d_pressed_stat:
+    lw $t0, PADDLE_LOC_LEFT
+    lw $t1, PADDLE_LOC_RIGHT
+    
+    beq $t1, 0x10009e78, moving_game_loop
+    
+    addi, $t2, $zero, 0x000000
+    
+    sw $t2, 0($t0)
+    addi $t0, $t0, 4
+    sw $t0, PADDLE_LOC_LEFT
+    
+    addi $t2, $zero, 0xffffff
+    
+    addi $t1, $t1, 4
+    sw $t2, 0($t1)
+    sw $t1, PADDLE_LOC_RIGHT
+    
+    addi $t2, $zero, 0x000000
+    lw $t0, BALL_LOC
+    sw $t2, 0($t0)
+    addi $t2, $zero, 0xffffff
+    addi $t0, $t0, 4
+    sw $t2, 0($t0)
+    sw $t0, BALL_LOC
+    
+    addi $t8, $zero, 0
+    j game_loop
+    
 handle_a_pressed:
     lw $t0, PADDLE_LOC_LEFT
     lw $t1, PADDLE_LOC_RIGHT
@@ -423,11 +488,40 @@ handle_a_pressed:
     addi $t8, $zero, 0
     j moving_game_loop
     
+handle_a_pressed_stat:
+    lw $t0, PADDLE_LOC_LEFT
+    lw $t1, PADDLE_LOC_RIGHT
+    
+    beq $t0, 0x10009e04, moving_game_loop
+    
+    addi, $t2, $zero, 0x000000
+    
+    sw $t2, 0($t1)
+    addi $t1, $t1, -4
+    sw $t1, PADDLE_LOC_RIGHT
+    
+    addi $t2, $zero, 0xffffff
+    addi $t0, $t0, -4
+    sw $t2, 0($t0)
+    sw $t0, PADDLE_LOC_LEFT
+    
+    addi $t2, $zero, 0x000000
+    lw $t0, BALL_LOC
+    sw $t2, 0($t0)
+    addi $t2, $zero, 0xffffff
+    addi $t0, $t0, -4
+    sw $t2, 0($t0)
+    sw $t0, BALL_LOC
+    
+    addi $t8, $zero, 0
+    j game_loop
+    
 handle_spacebar_pressed:
     # Shoot the ball upwards
     j moving_game_loop
     
 exit_loop:
+
     lw $t0, ADDR_KBRD
     lw $t8, 0($t0)
     beq $t8, 1, handle_keyboard_input_exit
@@ -435,6 +529,15 @@ exit_loop:
     j exit_loop
     
 exit:
+
+# Play sound on brick hit
+    addi $v0, $zero, 33
+    addi $a0, $zero, 64
+    addi $a1, $zero, 50
+    addi $a2, $zero, 50
+    addi $a3, $zero, 50
+    syscall
+
 li $v0, 10 # terminate the program gracefully
 syscall
 
