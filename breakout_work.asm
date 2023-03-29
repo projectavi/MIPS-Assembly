@@ -1,3 +1,21 @@
+################ CSC258H1S Winter 2023 Assembly Final Project ##################
+# This file contains our implementation of Breakout.
+#
+# Student 1: Aviraj Newatia, 1007837708
+######################## Bitmap Display Configuration ########################
+# - Unit width in pixels:       2
+# - Unit height in pixels:      2
+# - Display width in pixels:    64
+# - Display height in pixels:   128
+# - Base Address for Display:   0x10008000 ($gp)
+######################## Controls ########################
+# - a : Move Paddle Left
+# - d : Move Paddle Right
+# - spacebar : Launch Ball/Resume Game
+# - p : pause game
+# - q : quit game
+##############################################################################
+
 .data
 displayAddress: .word 0x10008000
 ADDR_KBRD: .word 0xffff0000
@@ -5,6 +23,7 @@ PADDLE_LOC_LEFT: .word 48
 PADDLE_LOC_RIGHT: .word 56
 BALL_LOC: .word 0
 BALL_ANGLE: .word -124 # - 124 is right 45, - 132 is left 45
+REFRESH_RATE: .word 64
 
 .text
 .globl main
@@ -14,6 +33,7 @@ li $t2, 0x00ff00 	# $t2 stores the green colour code
 li $t3, 0xff0000 	# $t3 stores the blue colour code
 
 main:
+
     jal layout_grid
     
     # Memory wipe? Memory wipe
@@ -25,6 +45,26 @@ main:
     jal game_loop
     
     j exit
+  
+reset_variables:
+    addi $t0, $zero, 48
+    sw $t0, PADDLE_LOC_LEFT
+    
+    addi $t0, $zero, 56
+    sw $t0, PADDLE_LOC_RIGHT
+    
+    addi $t0, $zero, 0
+    sw $t0, BALL_LOC
+    
+    addi $t0, $zero, -124
+    sw $t0, BALL_ANGLE
+    
+    addi $t0, $zero, 64
+    sw $t0, REFRESH_RATE
+      
+    lw $t0, displayAddress
+      
+    jr $ra
     
 game_loop:
     lw $t0, ADDR_KBRD
@@ -83,13 +123,13 @@ move_ball:
     
     # Sleep
     addi $v0, $zero, 32
-    addi $a0, $zero, 24
+    lw $a0, REFRESH_RATE
     syscall
     
     # Check if ball has reached the bottom of the screen and if so, end game
     lw $v0, PADDLE_LOC_RIGHT
     addi $v0, $v0, 128
-    bgt $t3, $v0, exit
+    bgt $t3, $v0, exit_loop
     
     jr $ra
 
@@ -169,6 +209,11 @@ bounce_right_control:
     
 delete_brick_bounce:
     # If ball was moving up then bounce down, if ball was moving down then bounce up
+    
+    # Load the refresh rate into $t9 and reduce it and store it back in refresh rate
+    lw $t9, REFRESH_RATE
+    addi $t9, $t9, -1
+    sw $t9, REFRESH_RATE
     
     bgez $a1 bounce_paddle
     blez $a1 bounce_roof
@@ -286,7 +331,50 @@ handle_keyboard_input:
     beq $a0, 'Q', handle_escape_key
     beq $a0, 'p', handle_p_pressed
     beq $a0, 'P', handle_p_pressed
+    beq $a0, 'r', handle_r_pressed
+    beq $a0, 'R', handle_r_pressed
     j moving_game_loop
+    
+handle_keyboard_input_exit:
+    lw $a0, 4($t0) # Loads the second word, which is the key that was pressed
+    beq $a0, 'q', handle_escape_key
+    beq $a0, 'Q', handle_escape_key
+    beq $a0, 'r', handle_r_pressed
+    beq $a0, 'R', handle_r_pressed
+    j exit_loop
+    
+handle_r_pressed: # Restart command, jump back to main
+    
+    jal reset_variables
+    
+    # Paint over everything
+    # Repaint everything
+    
+    lw $a0, displayAddress # Starting location
+    
+    addi $a1, $zero, 64 # Width
+    addi $a2, $zero, 128 # Height
+    addi $a3, $zero, 0x000000 # Colour
+    
+    
+    jal draw_rect
+    
+    lw $t0, displayAddress # Starting location
+    # addi $t3, $zero, 0xff0000
+    # addi $t2, $zero, 0xff00
+    # addi $t1, $zero, 0xff0000
+    # addi $v0, $zero, 0
+    addi $v1, $zero, 0
+    # addi $a0, $zero, 0
+    # addi $a1, $zero, 0
+    # addi $a2, $zero, 0
+    # addi $a3, $zero, 0
+    # addi $t4, $zero, 0
+    # addi $t5, $zero, 0
+    # addi $t6, $zero, 0
+    # addi $t8, $zero, 0
+    
+    j main
   
 handle_p_pressed:
     j game_loop
@@ -339,6 +427,12 @@ handle_spacebar_pressed:
     # Shoot the ball upwards
     j moving_game_loop
     
+exit_loop:
+    lw $t0, ADDR_KBRD
+    lw $t8, 0($t0)
+    beq $t8, 1, handle_keyboard_input_exit
+    
+    j exit_loop
     
 exit:
 li $v0, 10 # terminate the program gracefully
