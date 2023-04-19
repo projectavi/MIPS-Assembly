@@ -12,19 +12,19 @@
 # - a : Move Paddle Left
 # - d : Move Paddle Right
 # - spacebar : Launch Ball/Resume Game
-# - p : pause game
+# - p : pause/resume game
 # - q : quit game
 # - r : restart game
 ##############################################################################
 
 .data
-displayAddress: .word 0x10008000
-ADDR_KBRD: .word 0xffff0000
-PADDLE_LOC_LEFT: .word 48
-PADDLE_LOC_RIGHT: .word 56
-BALL_LOC: .word 0
-BALL_ANGLE: .word -124 # - 124 is right 45, - 132 is left 45
-REFRESH_RATE: .word 64
+displayAddress: .word 0x10008000 # Set the location of the display in memory to a variable
+ADDR_KBRD: .word 0xffff0000 # Set the location of the keyboard input to a variable
+PADDLE_LOC_LEFT: .word 48 # Set the initial offset of the left corner of the paddle, to be set to absolute location later
+PADDLE_LOC_RIGHT: .word 56 # Set the initial offset of the right corner of the paddle, to be set to absolute location later
+BALL_LOC: .word 0 # Initialise the location of the ball to 0, to be set later
+BALL_ANGLE: .word -124 # - 124 is right 45, - 132 is left 45, this is the value that gets added to the current location of the ball to move it in the right direction
+REFRESH_RATE: .word 64 # Refresh rate of the screen which is updated to speed up the ball movement as the game progresses
 
 .text
 .globl main
@@ -33,21 +33,21 @@ li $t1, 0xff0000 	# $t1 stores the red colour code
 li $t2, 0x00ff00 	# $t2 stores the green colour code
 li $t3, 0xff0000 	# $t3 stores the blue colour code
 
-main:
+main: # This is the main game function
 
-    jal layout_grid
+    jal layout_grid # jump and come back from the brick grid layout
     
-    # Memory wipe? Memory wipe
+    # Memory wipe? Memory wipe, don't have to worry about previous values
     
-    jal setup_border_and_paddle_and_ball
+    jal setup_border_and_paddle_and_ball # jump and come back from printing out the walls and the paddle and the ball
     
-    # Memory wipe
+    # Memory wipe, can use all registers
     
-    jal game_loop
+    jal game_loop # Move to the stationary game loop, its ready to play now
     
-    j exit
+    j exit # If control flow reaches this point, which it should not, exit the program
   
-reset_variables:
+reset_variables: # Function to reset all of the variables in memory so that the screen can be redrawn for the restart function
     addi $t0, $zero, 48
     sw $t0, PADDLE_LOC_LEFT
     
@@ -67,19 +67,25 @@ reset_variables:
       
     jr $ra
     
-game_loop:
-    lw $t0, ADDR_KBRD
-    lw $t8, 0($t0)
-    beq $t8, 1, handle_keyboard_input_stat
-    j game_loop
+game_loop: # Game loop for being paused and before the game starts
+    lw $t0, ADDR_KBRD # Load the address of the keyboard
+    lw $t8, 0($t0) # Load the beginning of the data at the address
+    beq $t8, 1, handle_keyboard_input_stat # If a key has been pressed, handle which key it was
+    j game_loop # Loop back to stationary game loop
     
-moving_game_loop:
-    lw $t0, ADDR_KBRD
-    lw $t8, 0($t0)
-    beq $t8, 1, handle_keyboard_input
-    jal move_ball
+paused_game_loop: # Game loop for being paused and before the game starts
+    lw $t0, ADDR_KBRD # Load the address of the keyboard
+    lw $t8, 0($t0) # Load the beginning of the data at the address
+    beq $t8, 1, handle_keyboard_input_paused # If a key has been pressed, handle which key it was
+    j paused_game_loop # Loop back to stationary game loop
     
-    j moving_game_loop
+moving_game_loop: # Game loop for while the game is running
+    lw $t0, ADDR_KBRD # Load keyboard address
+    lw $t8, 0($t0) # Load the beginning of the data
+    beq $t8, 1, handle_keyboard_input # Check and handle keyboard input
+    jal move_ball # Move to the function that handles ball movement and collision and store current address in $ra
+    
+    j moving_game_loop # Loop
 
 move_ball:
     lw $t3, BALL_LOC # Get the current location of the ball
@@ -132,7 +138,7 @@ move_ball:
     addi $v0, $v0, 128
     bgt $t3, $v0, exit_loop
     
-    jr $ra
+    jr $ra # jump back to the moving game loop
 
 bounce_down_control:
     lw $a1, BALL_ANGLE # Get the angle of movement of the ball
@@ -211,7 +217,7 @@ bounce_right_control:
 delete_brick_bounce:
     # If ball was moving up then bounce down, if ball was moving down then bounce up
     
-    addi $t9, $a1, 0
+    addi $t9, $a1, 0 # Temporarily store the value of $a1 in $t9 so it can be retrieved later
     
     # Play sound on brick hit
     addi $v0, $zero, 33
@@ -221,15 +227,15 @@ delete_brick_bounce:
     addi $a3, $zero, 50
     syscall
     
-    addi $a1, $t9, 0
+    addi $a1, $t9, 0 # Retrieve value of $a1 from $t9
     
     # Load the refresh rate into $t9 and reduce it and store it back in refresh rate
     lw $t9, REFRESH_RATE
     addi $t9, $t9, -1
     sw $t9, REFRESH_RATE
     
-    bgez $a1 bounce_paddle
-    blez $a1 bounce_roof
+    bgez $a1 bounce_paddle # If the ball was moving downwards then bounce it up
+    blez $a1 bounce_roof # If the ball was moving upwards then bounce it down
     
 delete_brick_loop_right:
     # Reset $t5
@@ -240,7 +246,7 @@ delete_brick_actual_loop_part_right:
     # Get the value of the colour at $t5
     lw $t6, 0($t5)
     
-    # If the colour is black then handle bouncing
+    # If the brick has been painted entirely black (destroyed) then handle the bouncing
     beq $t6, 0x000000, delete_brick_bounce
     
     # Store painting colour in $t7
@@ -257,7 +263,12 @@ delete_brick_actual_loop_part_right:
         # Move $t5 left
         addi $t5, $t5, 4
         
-        j delete_brick_actual_loop_part_right
+        # Sleep
+        addi $v0, $zero, 32
+        addi $a0, $zero, 34
+        syscall
+        
+        j delete_brick_actual_loop_part_right # loop
     
 delete_brick_loop_left:
     # Temporarily use $t5 to store which pixel you are deleting
@@ -280,6 +291,11 @@ delete_brick_loop_left:
         
         # Move $t5 left
         addi $t5, $t5, -4
+        
+        # Sleep
+        addi $v0, $zero, 32
+        addi $a0, $zero, 34
+        syscall
         
         j delete_brick_loop_left
     
@@ -304,28 +320,28 @@ bounce_roof:
     beq $a1, -132, bounce_downleft
 
 bounce_upleft:
-    addi $a1, $zero, -132
+    addi $a1, $zero, -132 # Movement modifier upleft
     
     add $t3, $t3, $a1
     
     j bounce_end
 
 bounce_upright:
-    addi $a1, $zero, -124
+    addi $a1, $zero, -124 # movement modifier upright
     
     add $t3, $t3, $a1
     
     j bounce_end
     
 bounce_downleft:
-    addi $a1, $zero, 124
+    addi $a1, $zero, 124 # movement modifier downleft
     
     add $t3, $t3, $a1
     
     j bounce_end
 
 bounce_downright:
-    addi $a1, $zero, 132
+    addi $a1, $zero, 132 # movement modifier downright
     
     add $t3, $t3, $a1
     
@@ -336,7 +352,7 @@ bounce_end:
     addi $t1, $zero, 0xffffff
     sw $t1, 0($t3)
     
-    # Store the new location in the variable
+    # Store the new location in the variable and the new current movement angle
     sw $t3, BALL_LOC
     sw $a1, BALL_ANGLE
     
@@ -365,11 +381,20 @@ handle_keyboard_input_stat:
     beq $a0, 'D', handle_d_pressed_stat
     beq $a0, 'q', handle_escape_key
     beq $a0, 'Q', handle_escape_key
-    beq $a0, 'p', handle_p_pressed
-    beq $a0, 'P', handle_p_pressed
     beq $a0, 'r', handle_r_pressed
     beq $a0, 'R', handle_r_pressed
-    j moving_game_loop
+    j game_loop
+    
+handle_keyboard_input_paused:
+    lw $a0, 4($t0) # Loads the second word, which is the key that was pressed
+    beq $a0, 32, handle_spacebar_pressed
+    beq $a0, 'q', handle_escape_key
+    beq $a0, 'Q', handle_escape_key
+    beq $a0, 'p', handle_spacebar_pressed
+    beq $a0, 'P', handle_spacebar_pressed
+    beq $a0, 'r', handle_r_pressed
+    beq $a0, 'R', handle_r_pressed
+    j paused_game_loop
     
 handle_keyboard_input_exit:
     lw $a0, 4($t0) # Loads the second word, which is the key that was pressed
@@ -381,7 +406,7 @@ handle_keyboard_input_exit:
     
 handle_r_pressed: # Restart command, jump back to main
     
-    jal reset_variables
+    jal reset_variables # reset all of the variables so main works again
     
     # Paint over everything
     # Repaint everything
@@ -396,36 +421,25 @@ handle_r_pressed: # Restart command, jump back to main
     jal draw_rect
     
     lw $t0, displayAddress # Starting location
-    # addi $t3, $zero, 0xff0000
-    # addi $t2, $zero, 0xff00
-    # addi $t1, $zero, 0xff0000
-    # addi $v0, $zero, 0
     addi $v1, $zero, 0
-    # addi $a0, $zero, 0
-    # addi $a1, $zero, 0
-    # addi $a2, $zero, 0
-    # addi $a3, $zero, 0
-    # addi $t4, $zero, 0
-    # addi $t5, $zero, 0
-    # addi $t6, $zero, 0
-    # addi $t8, $zero, 0
     
-    j main
+    j main # restart and go to the beginning of main to restart the game
   
 handle_p_pressed:
-    j game_loop
+    j paused_game_loop # move to the paused game loop to pause the game
   
 handle_escape_key:
-    j exit
+    j exit # jump to the exit function to terminate the program gracefully
   
 handle_d_pressed:
-    lw $t0, PADDLE_LOC_LEFT
+    lw $t0, PADDLE_LOC_LEFT # Load the locations of the paddle, left and right corner
     lw $t1, PADDLE_LOC_RIGHT
     
-    beq $t1, 0x10009e78, moving_game_loop
+    beq $t1, 0x10009e78, moving_game_loop # If the right corner of the paddle is at the wall, go back to the game loop
     
     addi, $t2, $zero, 0x000000
     
+    # Move the locations of the left and right paddle edges in memory
     sw $t2, 0($t0)
     addi $t0, $t0, 4
     sw $t0, PADDLE_LOC_LEFT
@@ -437,13 +451,13 @@ handle_d_pressed:
     sw $t1, PADDLE_LOC_RIGHT
     
     addi $t8, $zero, 0
-    j moving_game_loop
+    j moving_game_loop # GO back to the game loop
     
-handle_d_pressed_stat:
+handle_d_pressed_stat: # same thing as above but for stationary game, moves ball too
     lw $t0, PADDLE_LOC_LEFT
     lw $t1, PADDLE_LOC_RIGHT
     
-    beq $t1, 0x10009e78, moving_game_loop
+    beq $t1, 0x10009e78, game_loop
     
     addi, $t2, $zero, 0x000000
     
@@ -469,13 +483,14 @@ handle_d_pressed_stat:
     j game_loop
     
 handle_a_pressed:
-    lw $t0, PADDLE_LOC_LEFT
+    lw $t0, PADDLE_LOC_LEFT # load paddle locations
     lw $t1, PADDLE_LOC_RIGHT
     
-    beq $t0, 0x10009e04, moving_game_loop
+    beq $t0, 0x10009e04, moving_game_loop # if left wall reached, dont move
     
     addi, $t2, $zero, 0x000000
     
+    # else update paddle painting and memory locations
     sw $t2, 0($t1)
     addi $t1, $t1, -4
     sw $t1, PADDLE_LOC_RIGHT
@@ -486,13 +501,13 @@ handle_a_pressed:
     sw $t0, PADDLE_LOC_LEFT
     
     addi $t8, $zero, 0
-    j moving_game_loop
+    j moving_game_loop # go back to game loop
     
-handle_a_pressed_stat:
+handle_a_pressed_stat: # same as above but for the stationary game, moves ball too
     lw $t0, PADDLE_LOC_LEFT
     lw $t1, PADDLE_LOC_RIGHT
     
-    beq $t0, 0x10009e04, moving_game_loop
+    beq $t0, 0x10009e04, game_loop
     
     addi, $t2, $zero, 0x000000
     
@@ -521,7 +536,7 @@ handle_spacebar_pressed:
     j moving_game_loop
     
 exit_loop:
-
+    # Loop for when the game ends, waits to see if quit or restart is pressed
     lw $t0, ADDR_KBRD
     lw $t8, 0($t0)
     beq $t8, 1, handle_keyboard_input_exit
@@ -530,7 +545,7 @@ exit_loop:
     
 exit:
 
-# Play sound on brick hit
+# Play sound to lose game
     addi $v0, $zero, 33
     addi $a0, $zero, 64
     addi $a1, $zero, 50
